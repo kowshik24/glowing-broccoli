@@ -1,86 +1,87 @@
-# glowing-broccoli — machine failure prediction
+# Machine Failure Prediction
 
-Predicting `Machine failure` on the AI4I 2020 predictive maintenance dataset, then checking
-with SHAP that the model is actually picking up on the right physics for each failure mode
-instead of just fitting noise. Started as an EDA notebook, grew into a full pipeline once I
-started digging into why the minority class metrics were so bad.
+![pipeline](assets/pipeline.drawio.png)
 
-Dataset: https://archive.ics.uci.edu/dataset/601/ai4i+2020+predictive+maintenance+dataset (also
-sitting in `dataset/ai4i2020.csv`, 10k rows, synthetic but modeled on real industrial sensor data).
+Predicts `Machine failure` on the AI4I 2020 predictive maintenance dataset, then uses SHAP to
+verify the model is actually keying off the right physics for each of the five underlying failure
+mechanisms instead of just fitting noise.
 
-## Why this is harder than it looks
+Dataset: [AI4I 2020 Predictive Maintenance](https://archive.ics.uci.edu/dataset/601/ai4i+2020+predictive+maintenance+dataset)
+(also in `dataset/ai4i2020.csv`) — 10,000 rows, synthetic but modeled on real industrial sensor
+data, 3.39% failure rate.
 
-10,000 rows, only 339 are actual failures (3.39%). And `Machine failure` isn't one thing — it's
-the OR of five separate, mostly-independent failure mechanisms:
+## What was tried
 
-- **TWF** (tool wear failure) — tool crosses a wear-time window, 120 cases
-- **HDF** (heat dissipation failure) — air/process temp gap too small + low rpm, 115 cases
-- **PWF** (power failure) — torque × rpm outside a power window, 95 cases
-- **OSF** (overstrain failure) — tool wear × torque past a threshold, 98 cases
-- **RNF** (random failure) — literally a coin flip, 19 cases, no physical cause at all
+| Stage | Techniques |
+|---|---|
+| Feature engineering | `Power`, `Temp_diff`, `Overstrain`, `Overstrain_ratio` — derived straight from the failure-mode physics, not generic polynomial features |
+| Imbalance handling | SMOTE vs BorderlineSMOTE vs ADASYN, compared on validation F1; winner carried through |
+| Dimensionality check | PCA (diagnostic only — confirms the classes aren't linearly separable, explains why linear models lag) |
+| Models | Logistic Regression, SVM (RBF), KNN, Decision Tree, Random Forest, XGBoost, PyTorch MLP |
+| Tuning | `RandomizedSearchCV` (F1-scored) + validation-set decision-threshold tuning on the winning model |
+| Validation | 5-fold stratified CV (single 1,000-row test split isn't enough to trust on its own) |
+| Calibration | Isotonic calibration check on `predict_proba` before trusting it for threshold tuning |
+| Explainability | SHAP `TreeExplainer`, cross-checked against ground-truth TWF/HDF/PWF/OSF/RNF labels |
+| Bonus | Multi-label model predicting the 5 failure modes directly, not just failure/no-failure |
 
-The model only ever sees the combined `Machine failure` flag, never which mode caused it. RNF
-is the interesting one — since it has zero real signal, if SHAP shows the model actually leaning
-on some feature for RNF cases, that's a red flag that it's fitting noise. If it shows no clear
-signal, that's actually the model getting it right.
+## Results
 
-## What's in the notebook
+Best model: **tuned XGBoost**, BorderlineSMOTE-resampled training set, custom decision threshold
+instead of the default 0.5.
 
-`notebooks/Exploratory-Data-Analysis.ipynb`, roughly in this order:
+| Model | Precision | Recall | F1 | ROC-AUC |
+|---|---|---|---|---|
+| **XGBoost (tuned)** | **1.00** | 0.82 | **0.90** | 0.984 |
+| XGBoost (baseline) | 0.86 | 0.88 | 0.87 | 0.988 |
+| Random Forest | 0.79 | 0.88 | 0.83 | 0.989 |
+| PyTorch MLP | 0.53 | 0.91 | 0.67 | 0.978 |
+| Decision Tree | 0.68 | 0.82 | 0.75 | 0.927 |
+| SVM (RBF) | 0.42 | 0.88 | 0.57 | 0.976 |
+| KNN | 0.43 | 0.79 | 0.56 | 0.877 |
+| Logistic Regression | 0.24 | 0.85 | 0.37 | 0.943 |
 
-1. EDA — distributions, class balance, correlation heatmap, failure-mode counts, scatter plots
-   that visually confirm the physics rules from the dataset docs (torque vs rpm for PWF, temp
-   gap vs rpm for HDF, etc.)
-2. Feature engineering — `Power`, `Temp_diff`, `Overstrain`, `Overstrain_ratio`, built directly
-   from the failure-mode definitions rather than generic polynomial features
-3. Feature extraction — drops `UDI`/`Product ID` (identifiers), and **drops TWF/HDF/PWF/OSF/RNF
-   from the training features entirely** since they're literally components of the target —
-   training on them would be leakage. They're kept aside only for the XAI cross-check later.
-4. Stratified 70/20/10 train/val/test split
-5. Preprocessing (scale + one-hot) fit on train only, then SMOTE-family oversampling on train only
-6. A quick bake-off between SMOTE / BorderlineSMOTE / ADASYN on validation F1 — BorderlineSMOTE
-   won this run and gets used for the rest of the notebook (rerun it and it might pick something
-   else depending on the random draw, that's fine, the notebook adapts automatically)
-7. PCA, mostly to show *why* linear models are going to struggle — the two classes overlap almost
-   completely in a 2D projection, so the failure boundary isn't linearly separable
-8. Six classical models (Logistic Regression, SVM, KNN, Decision Tree, Random Forest, XGBoost)
-   plus a small PyTorch MLP, all evaluated on the untouched imbalanced val/test splits
-9. Test set evaluation with ROC/PR curves and confusion matrices for everything
-10. Hyperparameter search (`RandomizedSearchCV`, F1-scored) + threshold tuning on the winning
-    model (XGBoost), because the default 0.5 cutoff is a bad choice when 96% of your data is one
-    class
-11. 5-fold CV to sanity-check the tuned model isn't just lucky on one 1,000-row test split
-12. A calibration check — `predict_proba` on a tree model isn't automatically trustworthy as an
-    actual probability, worth confirming before leaning on it for the threshold above
-13. SHAP explanations on the final tuned model, cross-checked feature-by-feature against
-    TWF/HDF/PWF/OSF/RNF to see if the model actually learned the right mechanism per failure type
-14. A bonus multi-label model that predicts the five failure modes directly instead of inferring
-    them from SHAP — more useful in practice (tells you *what to fix*, not just *that something's
-    wrong*)
-15. Saves the tuned model + preprocessor to `models/` for the inference script below
+5-fold CV on the tuned model: F1 = 0.784 ± 0.029 — confirms the test-set score above isn't a lucky
+split (the tuned threshold is fit per-split there, so the raw number differs slightly from the
+single-split result above, which is expected).
 
-Results move around a bit run to run (random search, SMOTE variant, etc.), but the last full run
-landed the tuned XGBoost at precision 1.00 / recall 0.82 / F1 0.90 on the test set's 34 failure
-cases, up from precision 0.86 / recall 0.88 / F1 0.87 before tuning. All five SHAP-vs-failure-mode
-checks passed — tool wear drives TWF, temp gap/rpm drives HDF, power drives PWF, overstrain drives
-OSF, and RNF correctly shows no dominant feature.
+Class imbalance is why accuracy is useless here — a model that predicts "no failure" every time
+still scores ~96% accuracy. Precision/recall/F1 on the failure class is what actually matters.
 
-## Setup
+<img src="assets/images/class_imbalance.png" width="420"> <img src="assets/images/pca_2d.png" width="420">
 
-Using [uv](https://github.com/astral-sh/uv) for the venv, but plain `venv` + `pip install -r
-requirements.txt` works too if you don't have it.
+<img src="assets/images/roc_curves.png" width="420"> <img src="assets/images/pr_curves.png" width="420">
+
+## Explainable AI — does the model know *why*?
+
+`Machine failure` is the OR of five independent mechanisms, and the model is never told which one
+fired. SHAP was used to check, per mechanism, whether the model's top attributed feature actually
+matches the real physical cause:
+
+| Failure mode | Model's top SHAP feature | Actual mechanism | Match |
+|---|---|---|---|
+| TWF (tool wear) | `Tool wear [min]` | Tool wear | ✅ |
+| HDF (heat dissipation) | `Rotational speed [rpm]` | Temp gap + rpm | ✅ |
+| PWF (power) | `Power [W]` | Torque × rpm | ✅ |
+| OSF (overstrain) | `Overstrain_ratio` | Tool wear × torque | ✅ |
+| RNF (random) | no dominant feature | none — pure chance | ✅ |
+
+RNF passing means the model correctly found *nothing* to hang onto for the one failure mode that
+has no real cause — a model that "explained" RNF confidently would be the red flag, not the
+other way around.
+
+<img src="assets/images/shap_summary.png" width="420"> <img src="assets/images/shap_crosscheck_heatmap.png" width="420">
+
+## Running it
 
 ```bash
 uv venv .venv --python 3.13
 source .venv/bin/activate
 uv pip install -r requirements.txt
-
-# register the kernel so Jupyter/VS Code can find it
 python -m ipykernel install --user --name glowing-broccoli-venv --display-name "Python 3 (venv)"
 ```
 
-Then open `notebooks/Exploratory-Data-Analysis.ipynb` and pick the `Python 3 (venv)` kernel, or
-run it headless:
+Open `notebooks/Exploratory-Data-Analysis.ipynb`, select the `Python 3 (venv)` kernel, run all.
+Headless equivalent:
 
 ```bash
 cd notebooks
@@ -90,45 +91,32 @@ jupyter nbconvert --to notebook --execute --inplace \
   Exploratory-Data-Analysis.ipynb
 ```
 
-Give it 15-20 minutes on a laptop — the hyperparameter search alone is ~200 XGBoost fits, plus
-the 5-fold CV re-fits a fresh model per fold.
+Takes 15-20 minutes — the hyperparameter search alone is ~200 XGBoost fits.
 
-### A gotcha if you're on Apple Silicon
+**Apple Silicon note:** numpy/sklearn/xgboost/torch each bundle their own threaded BLAS/OpenMP
+runtime, and running them together in one Jupyter kernel segfaults the kernel with no useful
+traceback. The notebook forces everything single-threaded before any other imports
+(`OMP_NUM_THREADS=1`, `KMP_DUPLICATE_LIB_OK=TRUE`) — don't strip that cell out. If xgboost itself
+won't import (`libomp.dylib` not found), `brew install libomp` first.
 
-numpy, scikit-learn, xgboost and torch each bundle their own threaded BLAS/OpenMP runtime, and
-running all of them in one process (which a Jupyter kernel does) reliably crashed the kernel here
-with no useful error — nbconvert just reports "Kernel died" with no traceback pointing at the real
-cause. Took a while to track down. The imports cell forces everything single-threaded
-(`OMP_NUM_THREADS=1` etc, plus `KMP_DUPLICATE_LIB_OK=TRUE`) before anything else gets imported —
-if you strip that out expect random segfaults partway through, usually right around the first
-`torch.tensor()` call after xgboost has already been used. Also: skip PyTorch's MPS backend for
-this — the model's tiny, CPU is plenty fast, and MPS + xgboost together in one process wasn't
-stable either.
+## Scoring new data
 
-If xgboost itself won't import on macOS (`Library not loaded: @rpath/libomp.dylib`), you need
-`brew install libomp` — it's not something pip can fix.
-
-## Using the trained model without the notebook
-
-Once the notebook's run at least once (it saves `models/preprocessor.joblib`,
-`models/xgboost_tuned.joblib`, `models/metadata.joblib`):
+Once the notebook's been run once (saves `models/*.joblib`):
 
 ```bash
-python src/predict.py --csv path/to/new_readings.csv
 python src/predict.py --csv path/to/new_readings.csv --out predictions.csv
 ```
 
-Input CSV needs: `Type`, `Air temperature [K]`, `Process temperature [K]`,
-`Rotational speed [rpm]`, `Torque [Nm]`, `Tool wear [min]`. The script reconstructs the same
-engineered features (`Power`, `Temp_diff`, `Overstrain`, `Overstrain_ratio`) the model was trained
-on and applies the tuned decision threshold, not the default 0.5.
+Input needs: `Type`, `Air temperature [K]`, `Process temperature [K]`, `Rotational speed [rpm]`,
+`Torque [Nm]`, `Tool wear [min]`.
 
 ## Layout
 
 ```
-dataset/ai4i2020.csv          the raw data
-notebooks/                    the actual work — EDA through XAI
-models/                       saved model + preprocessor (generated by the notebook)
-src/predict.py                CLI inference on new data
-requirements.txt              pinned versions, tested on macOS/arm64
+dataset/ai4i2020.csv     raw data
+notebooks/                EDA through XAI, one notebook
+models/                   saved model + preprocessor (generated, gitignored)
+src/predict.py             CLI inference on new rows
+assets/                   pipeline diagram + result plots
+requirements.txt          pinned versions
 ```
