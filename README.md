@@ -16,7 +16,7 @@ data, 3.39% failure rate.
 |---|---|
 | Feature engineering | `Power`, `Temp_diff`, `Overstrain`, `Overstrain_ratio` — derived straight from the failure-mode physics, not generic polynomial features |
 | Imbalance handling | SMOTE vs BorderlineSMOTE vs ADASYN, compared on validation F1; winner carried through |
-| Dimensionality check | PCA (diagnostic only — confirms the classes aren't linearly separable, explains why linear models lag) |
+| Dimensionality check | PCA vs t-SNE vs UMAP (diagnostic only — see below) |
 | Models | Logistic Regression, SVM (RBF), KNN, Decision Tree, Random Forest, XGBoost, PyTorch MLP |
 | Tuning | `RandomizedSearchCV` (F1-scored) + validation-set decision-threshold tuning on the winning model |
 | Validation | 5-fold stratified CV (single 1,000-row test split isn't enough to trust on its own) |
@@ -39,6 +39,16 @@ instead of the default 0.5.
 | SVM (RBF) | 0.42 | 0.88 | 0.57 | 0.976 |
 | KNN | 0.43 | 0.79 | 0.56 | 0.877 |
 | Logistic Regression | 0.24 | 0.85 | 0.37 | 0.943 |
+
+### PCA vs t-SNE vs UMAP
+
+Three views of the same 12-dimensional training data. PCA (linear) shows the classes smeared
+together with no clean separating direction. t-SNE and UMAP (both nonlinear, preserve local
+neighborhoods) show the failure points clumping into several distinct pockets rather than one
+region — consistent with `Machine failure` actually being five separate physical mechanisms, each
+carving out its own little neighborhood in feature space instead of one shared "failure zone".
+
+![PCA vs t-SNE vs UMAP](assets/images/dimred_comparison.png)
 
 5-fold CV on the tuned model: F1 = 0.784 ± 0.029 — confirms the test-set score above isn't a lucky
 split (the tuned threshold is fit per-split there, so the raw number differs slightly from the
