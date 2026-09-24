@@ -1,0 +1,9 @@
+.venv
+models/
+papers/
+assets/.$*.dtmp
+paper/*.aux
+paper/*.bbl
+paper/*.blg
+paper/*.log
+paper/*.out
