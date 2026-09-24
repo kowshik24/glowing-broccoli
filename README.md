@@ -51,6 +51,17 @@ still scores ~96% accuracy. Precision/recall/F1 on the failure class is what act
 
 <img src="assets/images/roc_curves.png" width="420"> <img src="assets/images/pr_curves.png" width="420">
 
+### Resampling, visualized
+
+Same comparison [imbalanced-learn's own docs](https://imbalanced-learn.org/stable/auto_examples/over-sampling/plot_comparison_over_sampling.html)
+run — a plain Logistic Regression fit on the 2D PCA projection, once per sampler. Without
+resampling the boundary barely bends toward the minority (red) class; each oversampler drags it
+further into majority territory, trading precision for recall — the same tradeoff the metrics
+table above shows in numbers.
+
+![resampling comparison](assets/images/resampling_scatter_2d.png)
+![decision boundary comparison](assets/images/decision_boundary_2d.png)
+
 ## Explainable AI — does the model know *why*?
 
 `Machine failure` is the OR of five independent mechanisms, and the model is never told which one
