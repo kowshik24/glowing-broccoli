@@ -1,4 +1,33 @@
-.venv
+# Notes / scratch
+prompt.md
+status.md
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.Python
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+
+# Env / secrets
+.env
 models/
 papers/
 assets/.$*.dtmp

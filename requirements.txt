@@ -10,3 +10,4 @@ umap-learn==0.5.12
 torch==2.14.0
 jupyter==1.1.1
 ipykernel==7.3.0
+ucimlrepo
