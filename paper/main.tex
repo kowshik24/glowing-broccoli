@@ -19,6 +19,7 @@ SHAP Explanations in Multi-Mechanism Predictive Maintenance}
 
 \author{
   Koshik Debanath \\
+  \small Independent Researcher \\
   \small \texttt{koshik.debanath@gmail.com}
 }
 
@@ -106,7 +107,7 @@ Code & Name & Trigger condition & Count \\
 \midrule
 TWF & Tool wear failure & tool wear falls in a randomly assigned 200--240\,min window & 46 \\
 HDF & Heat dissipation failure & (process temp.\ $-$ air temp.) $< 8.6$\,K \textbf{and} rpm $< 1380$ & 115 \\
-PWF & Power failure & torque $\times$ rpm (rad/s) outside $[3500\text{W}, 9000\text{W}]$ & 95 \\
+PWF & Power failure & torque $\times$ rpm (rad/s) outside $[3500\,\text{W}, 9000\,\text{W}]$ & 95 \\
 OSF & Overstrain failure & tool wear $\times$ torque exceeds a type-specific limit (11/12/13k) & 98 \\
 RNF & Random failure & fixed 0.1\% chance, independent of all process variables & 19 \\
 \bottomrule
@@ -141,10 +142,8 @@ attribution is computable in closed form \citep{liu2021synthetic}. Our approach 
 where the ground truth comes from -- rather than designing a synthetic task for the purpose of
 evaluating explanations, we reuse sub-labels that already exist in an otherwise ordinary,
 publicly available PdM benchmark, aggregated away in the task the model is actually asked to solve.
-We note, and return to in Section~\ref{sec:limitations}, that AI4I~2020 is itself a simulated
-dataset generated from these same closed-form rules, which is a weaker form of ground truth than an
-independently verified physical measurement -- our contribution is the protocol, not a claim that
-this particular dataset constitutes real-world causal validation.
+AI4I~2020 is itself a simulated dataset generated from these same closed-form rules, a caveat we
+return to in Section~\ref{sec:limitations}.
 
 \section{Dataset}
 
@@ -159,7 +158,7 @@ of 10{,}000 rows (3.39\%), a severe class imbalance typical of real PdM data.
 
 \subsection{Feature engineering}
 We construct four features directly from the mechanism definitions in Table~\ref{tab:mechanisms},
-without using the mechanism labels themselves: \emph{Power} $=$ torque $\times$ rpm(rad/s) (mirrors
+without using the mechanism labels themselves: \emph{Power} $=$ torque $\times$ rpm (rad/s) (mirrors
 the PWF rule), \emph{Temp\_diff} $=$ process temperature $-$ air temperature (mirrors HDF),
 \emph{Overstrain} $=$ tool wear $\times$ torque (mirrors OSF), and \emph{Overstrain\_ratio} $=$
 Overstrain normalized by the type-specific limit. This gives the model, in principle, direct access
@@ -460,6 +459,11 @@ Beyond the specific result, we position this as a general, low-cost protocol app
 coarse PdM target aggregates several distinct, partially-labeled failure modes -- the common case in
 practice -- as a complement to, not a replacement for, existing faithfulness-evaluation methods built
 on purpose-designed synthetic data.
+
+\paragraph{Code and data availability.} Code, the trained model artifacts, and the full notebook
+reproducing every table and figure in this paper are available at
+\url{https://github.com/kowshik24/glowing-broccoli}. AI4I~2020 is public
+\citep{matzka2020explainable} and included in the repository.
 
 \bibliographystyle{plainnat}
 \bibliography{refs}
